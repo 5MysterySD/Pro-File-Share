@@ -13,9 +13,7 @@ db = Database()
 
 @Client.on_message(filters.command(["start"]) & filters.private, group=1)
 async def start(bot, update):
-#adding force subscribe option to bot
-    update_channel = FORCESUB_CHANNEL
-    if update_channel:
+    if update_channel := FORCESUB_CHANNEL:
         try:
             user = await bot.get_chat_member(update_channel, update.chat.id)
             if user.status == "kicked":
@@ -44,17 +42,22 @@ Join on our channel to get movies ✅
         file_uid = update.command[1]
     except IndexError:
         file_uid = False
-    
+
     if file_uid:
         file_id, file_name, file_caption, file_type = await db.get_file(file_uid)
-        
-        if (file_id or file_type) == None:
+
+        if ((file_id or file_type)) is None:
             return
-        
-        caption = file_caption if file_caption != ("" or None) else ("<code>" + file_name + "</code>")
-        
+
+        caption = (
+            file_caption
+            if file_caption != ("" or None)
+            else f"<code>{file_name}</code>"
+        )
+
+
         if file_type == "document":
-        
+
             await bot.send_document(
                 chat_id=update.chat.id,
                 document = file_id,
@@ -74,7 +77,7 @@ Join on our channel to get movies ✅
             )
 
         elif file_type == "video":
-        
+
             await bot.send_video(
                 chat_id=update.chat.id,
                 video = file_id,
@@ -91,9 +94,9 @@ Join on our channel to get movies ✅
                     ]
                 )
             )
-            
+
         elif file_type == "audio":
-        
+
             await bot.send_audio(
                 chat_id=update.chat.id,
                 audio = file_id,
@@ -113,7 +116,7 @@ Join on our channel to get movies ✅
 
         else:
             print(file_type)
-        
+
         return
 
     buttons = [[
@@ -124,9 +127,9 @@ Join on our channel to get movies ✅
     ],[
         InlineKeyboardButton('Help ⚙', callback_data="help")
     ]]
-    
+
     reply_markup = InlineKeyboardMarkup(buttons)
-    
+
     await bot.send_message(
         chat_id=update.chat.id,
         text=Translation.START_TEXT.format(

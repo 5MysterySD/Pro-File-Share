@@ -5,11 +5,11 @@ from bot import DB_URI # pylint: disable=import-error
 class Singleton(type):
     __instances__ = {}
 
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls.__instances__:
-            cls.__instances__[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+    def __call__(self, *args, **kwargs):
+        if self not in self.__instances__:
+            self.__instances__[self] = super(Singleton, self).__call__(*args, **kwargs)
 
-        return cls.__instances__[cls]
+        return self.__instances__[self]
 
 
 class Database(metaclass=Singleton):
@@ -68,23 +68,23 @@ class Database(metaclass=Singleton):
         Get the total filters, total connected
         chats and total active chats of a chat
         """
-        group_id = int(group_id)
-        
+        group_id = group_id
+
         total_filter = await self.tf_count(group_id)
-        
+
         chats = await self.find_chat(group_id)
         chats = chats.get("chat_ids")
         total_chats = len(chats) if chats is not None else 0
-        
+
         achats = await self.find_active(group_id)
         if achats not in (None, False):
             achats = achats.get("chats")
-            if achats == None:
+            if achats is None:
                 achats = []
         else:
             achats = []
         total_achats = len(achats)
-        
+
         return total_filter, total_chats, total_achats
 
 
@@ -97,11 +97,12 @@ class Database(metaclass=Singleton):
         group_list = []
 
         for group_id in await data.to_list(length=50): # No Need Of Even 50
-            for y in group_id["chat_ids"]:
-                if int(y["chat_id"]) == int(channel_id):
-                    group_list.append(group_id["_id"])
-                else:
-                    continue
+            group_list.extend(
+                group_id["_id"]
+                for y in group_id["chat_ids"]
+                if int(y["chat_id"]) == channel_id
+            )
+
         return group_list
 
     # Related TO Finding Channel(s)
@@ -110,12 +111,12 @@ class Database(metaclass=Singleton):
         A funtion to fetch a group's settings
         """
         connections = self.cache.get(str(group_id))
-        
+
         if connections is not None:
             return connections
 
         connections = await self.col.find_one({'_id': group_id})
-        
+
         if connections:
             self.cache[str(group_id)] = connections
 
@@ -152,12 +153,9 @@ class Database(metaclass=Singleton):
         """
         A Funtion to delete a channel and its files from db of a chat connection
         """
-        group_id, channel_id = int(group_id), int(channel_id) # group_id and channel_id Didnt type casted to int for some reason
-        
-        prev = self.col.find_one({"_id": group_id})
-        
-        if prev:
-            
+        group_id, channel_id = group_id, channel_id
+
+        if prev := self.col.find_one({"_id": group_id}):
             await self.col.update_one(
                 {"_id": group_id}, 
                     {"$pull" : 
@@ -184,19 +182,16 @@ class Database(metaclass=Singleton):
         Check whether if the given channel id is in db or not...
         """
         connections = self.cache.get(group_id)
-        
+
         if connections is None:
             connections = await self.col.find_one({'_id': group_id})
-        
-        check_list = []
-        
-        if connections:
-            for x in connections["chat_ids"]:
-                check_list.append(int(x.get("chat_id")))
 
-            if int(channel_id) in check_list:
+        if connections:
+            check_list = [int(x.get("chat_id")) for x in connections["chat_ids"]]
+
+            if channel_id in check_list:
                 return True
-        
+
         return False
 
 
@@ -204,15 +199,15 @@ class Database(metaclass=Singleton):
         """
         A Funtion to update a chat's filter types in db
         """
-        group_id = int(group_id)
+        group_id = group_id
         prev = await self.col.find_one({"_id": group_id})
-        
+
         if prev:
             try:
                 await self.col.update_one({"_id": group_id}, {"$set": {"types": settings}})
                 await self.refresh_cache(group_id)
                 return True
-            
+
             except Exception as e:
                 print (e)
                 return False
@@ -302,13 +297,11 @@ class Database(metaclass=Singleton):
         A funtion to delete a channel from active chat colletion in db
         """
         templ = {"$pull": {"chats": dict(chat_id = channel_id)}}
-        
+
         try:
             await self.acol.update_one({"_id": group_id}, templ, False, True)
         except Exception as e:
             print(e)
-            pass
-        
         await self.refresh_acache(group_id)
         return True
 
@@ -317,12 +310,12 @@ class Database(metaclass=Singleton):
         """
         A Funtion to add a new active chat to the connected group
         """
-        group_id, channel_id = int(group_id), int(channel_id)
-        
+        group_id, channel_id = group_id, channel_id
+
         prev = await self.acol.find_one({"_id": group_id})
         templ = {"$push" : {"chats" : dict(chat_id = channel_id, chat_name = channel_name)}}
         in_c = await self.in_active(group_id, channel_id)
-        
+
         if prev:
             if not in_c:
                 await self.acol.update_one({"_id": group_id}, templ)
@@ -355,14 +348,9 @@ class Database(metaclass=Singleton):
         chat id list in db
         """
         prev = await self.acol.find_one({"_id": group_id})
-        
+
         if prev:
-            for x in prev["chats"]:
-                if x["chat_id"] == channel_id:
-                    return True
-            
-            return False
-        
+            return any(x["chat_id"] == channel_id for x in prev["chats"])
         return False
 
 
@@ -371,7 +359,7 @@ class Database(metaclass=Singleton):
         A Funtion to Delete all active chats of 
         a group from db
         """
-        await self.acol.delete_one({"_id":int(group_id)})
+        await self.acol.delete_one({"_id": group_id})
         await self.refresh_acache(group_id)
         return
 
@@ -409,8 +397,8 @@ class Database(metaclass=Singleton):
         A Funtion to delete all filters of a specific
         chat and group from db
         """
-        group_id, channel_id = int(group_id), int(channel_id)
-        
+        group_id, channel_id = group_id, channel_id
+
         try:
             await self.fcol.delete_many({"chat_id": channel_id, "group_id": group_id})
             print(await self.cf_count(group_id, channel_id))
@@ -424,7 +412,7 @@ class Database(metaclass=Singleton):
         """
         A Funtion To delete all filters of a group
         """
-        await self.fcol.delete_many({"group_id": int(group_id)})
+        await self.fcol.delete_many({"group_id": group_id})
         return True
 
 
@@ -435,24 +423,21 @@ class Database(metaclass=Singleton):
         """
 
         achats = await self.find_active(group_id)
-        
-        achat_ids=[]
+
         if not achats:
             return False
-        
-        for chats in achats["chats"]:
-            achat_ids.append(chats.get("chat_id"))
-        
+
+        achat_ids = [chats.get("chat_id") for chats in achats["chats"]]
         filters = []
-        
+
         pattern = keyword.lower().strip().replace(' ','.*')
-        raw_pattern = r"\b{}\b".format(pattern)
+        raw_pattern = f"\b{pattern}\b"
         regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-                
+
         db_list = self.fcol.find({"file_name": regex})
-        
+
         for document in await db_list.to_list(length=600):
-            
+
             if document["chat_id"] in achat_ids:
                 filters.append(document)
             else:
@@ -471,7 +456,7 @@ class Database(metaclass=Singleton):
         file_type = None
         file_name = None
         file_caption = None
-        
+
         if file:
             file_id = file.get("file_id")
             file_name = file.get("file_name")
